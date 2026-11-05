@@ -1,121 +1,232 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+class DBTareas {
+  static const _clave = 'tareas';
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  static Future<List<Map<String, dynamic>>> listar() async {
+    final prefs = await SharedPreferences.getInstance();
+    final contenido = prefs.getString(_clave);
+    if (contenido == null) return [];
 
-  // This widget is the root of your application.
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+    final tareas = jsonDecode(contenido) as List<dynamic>;
+    return tareas
+        .map((tarea) => Map<String, dynamic>.from(tarea as Map))
+        .toList();
+  }
+
+  static Future<void> _guardar(List<Map<String, dynamic>> tareas) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_clave, jsonEncode(tareas));
+  }
+
+  static Future<void> insertar(String titulo) async {
+    final tareas = await listar();
+    final siguienteId = tareas.isEmpty
+        ? 1
+        : tareas.map((tarea) => tarea['id'] as int).reduce((a, b) => a > b ? a : b) + 1;
+    tareas.add({'id': siguienteId, 'titulo': titulo, 'completada': 0});
+    await _guardar(tareas);
+  }
+
+  static Future<void> actualizar(int id, String titulo) async {
+    final tareas = await listar();
+    for (final tarea in tareas) {
+      if (tarea['id'] == id) tarea['titulo'] = titulo;
+    }
+    await _guardar(tareas);
+  }
+
+  static Future<void> toggleCompletada(int id, bool completada) async {
+    final tareas = await listar();
+    for (final tarea in tareas) {
+      if (tarea['id'] == id) tarea['completada'] = completada ? 1 : 0;
+    }
+    await _guardar(tareas);
+  }
+
+  static Future<void> eliminar(int id) async {
+    final tareas = await listar();
+    tareas.removeWhere((tarea) => tarea['id'] == id);
+    await _guardar(tareas);
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: TareasPage(),
+    ));
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class TareasPage extends StatefulWidget {
+  const TareasPage({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<TareasPage> createState() => _TareasPageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _TareasPageState extends State<TareasPage> {
+  final _tareaCtrl = TextEditingController();
+  List<Map<String, dynamic>> _todasLasTareas = [];
+  String _filtro = 'todas'; // 'todas', 'pendientes', 'completadas'
 
-  void _incrementCounter() {
+  @override
+  void initState() {
+    super.initState();
+    _cargarFiltroPreferencia();
+    _cargarTareas();
+  }
+
+  Future<void> _cargarFiltroPreferencia() async {
+    final prefs = await SharedPreferences.getInstance();
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _filtro = prefs.getString('filtro_tareas') ?? 'todas';
     });
   }
 
+  Future<void> _guardarFiltroPreferencia(String nuevoFiltro) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('filtro_tareas', nuevoFiltro);
+    setState(() {
+      _filtro = nuevoFiltro;
+    });
+  }
+
+  Future<void> _cargarTareas() async {
+    final datos = await DBTareas.listar();
+    setState(() {
+      _todasLasTareas = datos;
+    });
+  }
+
+  List<Map<String, dynamic>> get _tareasFiltradas {
+    if (_filtro == 'pendientes') {
+      return _todasLasTareas.where((t) => t['completada'] == 0).toList();
+    } else if (_filtro == 'completadas') {
+      return _todasLasTareas.where((t) => t['completada'] == 1).toList();
+    }
+    return _todasLasTareas;
+  }
+
+  Future<void> _agregarTarea() async {
+    if (_tareaCtrl.text.trim().isEmpty) return;
+    await DBTareas.insertar(_tareaCtrl.text.trim());
+    _tareaCtrl.clear();
+    _cargarTareas();
+  }
+
+  void _editarDialog(int id, String tituloActual) {
+    final editCtrl = TextEditingController(text: tituloActual);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Editar Tarea'),
+        content: TextField(controller: editCtrl),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ElevatedButton(
+            onPressed: () async {
+              if (editCtrl.text.trim().isNotEmpty) {
+                await DBTareas.actualizar(id, editCtrl.text.trim());
+                _cargarTareas();
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
+    final lista = _tareasFiltradas;
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('Gestor de Tareas Offline'),
+        actions: [
+          PopupMenuButton<String>(
+            initialValue: _filtro,
+            onSelected: (val) => _guardarFiltroPreferencia(val),
+            itemBuilder: (ctx) => [
+              const PopupMenuItem(value: 'todas', child: Text('Mostrar Todas')),
+              const PopupMenuItem(value: 'pendientes', child: Text('Solo Pendientes')),
+              const PopupMenuItem(value: 'completadas', child: Text('Solo Completadas')),
+            ],
+          )
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _tareaCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Nueva Tarea',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton.filled(
+                  icon: const Icon(Icons.add),
+                  onPressed: _agregarTarea,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: lista.isEmpty
+                  ? const Center(child: Text('No hay tareas registradas'))
+                  : ListView.builder(
+                      itemCount: lista.length,
+                      itemBuilder: (context, i) {
+                        final t = lista[i];
+                        final bool completada = t['completada'] == 1;
+                        return Card(
+                          child: ListTile(
+                            leading: Checkbox(
+                              value: completada,
+                              onChanged: (val) async {
+                                await DBTareas.toggleCompletada(t['id'], val ?? false);
+                                _cargarTareas();
+                              },
+                            ),
+                            title: Text(
+                              t['titulo'],
+                              style: TextStyle(
+                                decoration: completada ? TextDecoration.lineThrough : null,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit, color: Colors.blue),
+                                  onPressed: () => _editarDialog(t['id'], t['titulo']),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.red),
+                                  onPressed: () async {
+                                    await DBTareas.eliminar(t['id']);
+                                    _cargarTareas();
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
