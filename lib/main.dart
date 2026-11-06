@@ -1,121 +1,134 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
+import 'package:sensors_plus/sensors_plus.dart';
 
-void main() {
-  runApp(const MyApp());
+void main() => runApp(const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: BitacoraPage(),
+    ));
+
+class RegistroInspeccion {
+  final String fotoPath;
+  final DateTime fechaHora;
+  final String acelerometro;
+  final String giroscopio;
+
+  RegistroInspeccion({
+    required this.fotoPath,
+    required this.fechaHora,
+    required this.acelerometro,
+    required this.giroscopio,
+  });
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class BitacoraPage extends StatefulWidget {
+  const BitacoraPage({super.key});
 
-  // This widget is the root of your application.
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
-      ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
-    );
+  State<BitacoraPage> createState() => _BitacoraPageState();
+}
+
+class _BitacoraPageState extends State<BitacoraPage> {
+  double _accX = 0, _accY = 0, _accZ = 0;
+  double _gyroX = 0, _gyroY = 0, _gyroZ = 0;
+  final List<RegistroInspeccion> _registros = [];
+
+  @override
+  void initState() {
+    super.initState();
+    accelerometerEventStream().listen((e) {
+      if (mounted) setState(() { _accX = e.x; _accY = e.y; _accZ = e.z; });
+    });
+    gyroscopeEventStream().listen((e) {
+      if (mounted) setState(() { _gyroX = e.x; _gyroY = e.y; _gyroZ = e.z; });
+    });
   }
-}
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
+  Future<void> _capturarInspeccion() async {
+    final picker = ImagePicker();
+    final XFile? foto = await picker.pickImage(
+      source: ImageSource.camera,
+      imageQuality: 80,
+    );
 
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
+    if (foto == null) return; // Manejo de cancelación
 
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
+    final nuevoRegistro = RegistroInspeccion(
+      fotoPath: foto.path,
+      fechaHora: DateTime.now(),
+      acelerometro: 'X: ${_accX.toStringAsFixed(2)}, Y: ${_accY.toStringAsFixed(2)}, Z: ${_accZ.toStringAsFixed(2)}',
+      giroscopio: 'X: ${_gyroX.toStringAsFixed(2)}, Y: ${_gyroY.toStringAsFixed(2)}, Z: ${_gyroZ.toStringAsFixed(2)}',
+    );
 
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _registros.insert(0, nuevoRegistro);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      appBar: AppBar(title: const Text('Bitácora de Inspección')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
           children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+            Card(
+              color: Colors.blueGrey.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Sensores en tiempo real:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 4),
+                    Text('Acelerómetro: X: ${_accX.toStringAsFixed(2)} | Y: ${_accY.toStringAsFixed(2)} | Z: ${_accZ.toStringAsFixed(2)}'),
+                    Text('Giroscopio: X: ${_gyroX.toStringAsFixed(2)} | Y: ${_gyroY.toStringAsFixed(2)} | Z: ${_gyroZ.toStringAsFixed(2)}'),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton.icon(
+              onPressed: _capturarInspeccion,
+              icon: const Icon(Icons.add_a_photo),
+              label: const Text('Nueva Inspección'),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _registros.isEmpty
+                  ? const Center(child: Text('Sin registros de inspección.'))
+                  : ListView.builder(
+                      itemCount: _registros.length,
+                      itemBuilder: (context, i) {
+                        final reg = _registros[i];
+                        final fechaFmt = DateFormat('dd/MM/yyyy hh:mm:ss a').format(reg.fechaHora);
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Image.file(File(reg.fotoPath), height: 180, width: double.infinity, fit: BoxFit.cover),
+                                ),
+                                const SizedBox(height: 8),
+                                Text('Fecha: $fechaFmt', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Text('Acc: ${reg.acelerometro}', style: const TextStyle(fontSize: 12)),
+                                Text('Gyro: ${reg.giroscopio}', style: const TextStyle(fontSize: 12)),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
       ),
     );
   }
