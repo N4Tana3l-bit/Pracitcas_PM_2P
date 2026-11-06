@@ -1,121 +1,202 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:http/http.dart' as http;
 
-void main() {
-  runApp(const MyApp());
+final FlutterLocalNotificationsPlugin notifPlugin = FlutterLocalNotificationsPlugin();
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+  await notifPlugin.initialize(settings: const InitializationSettings(android: android));
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: MainNavegacion(),
+  ));
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MainNavegacion extends StatefulWidget {
+  const MainNavegacion({super.key});
 
-  // This widget is the root of your application.
+  @override
+  State<MainNavegacion> createState() => _MainNavegacionState();
+}
+
+class _MainNavegacionState extends State<MainNavegacion> {
+  int _idx = 0;
+  final List<Widget> _pantallas = const [
+    InicioScreen(),
+    FormularioScreen(),
+    ApiSincronizacionScreen(),
+  ];
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+    return Scaffold(
+      body: _pantallas[_idx],
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _idx,
+        onTap: (i) => setState(() => _idx = i),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.inventory), label: 'Inventario'),
+          BottomNavigationBarItem(icon: Icon(Icons.add_box), label: 'Nuevo Registro'),
+          BottomNavigationBarItem(icon: Icon(Icons.cloud_sync), label: 'Sincronizar REST'),
+        ],
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class InicioScreen extends StatelessWidget {
+  const InicioScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Gestión de Inventario & Mantenimiento')),
+      body: const Center(
+        child: Padding(
+          padding: EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.precision_manufacturing, size: 80, color: Colors.blueAccent),
+              SizedBox(height: 16),
+              Text(
+                'Sistema Móvil Integrado v1.0',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('Gestione sus activos con geolocalización, captura de imágenes y respaldo en la nube.'),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class FormularioScreen extends StatefulWidget {
+  const FormularioScreen({super.key});
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  @override
+  State<FormularioScreen> createState() => _FormularioScreenState();
+}
+
+class _FormularioScreenState extends State<FormularioScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _nombreCtrl = TextEditingController();
+  final _codigoCtrl = TextEditingController();
+
+  Future<void> _guardarYNotificar() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    const detalles = NotificationDetails(
+      android: AndroidNotificationDetails(
+        'canal_evaluable',
+        'Alertas Inventario',
+        importance: Importance.high,
+      ),
+    );
+    await notifPlugin.show(
+      id: 2,
+      title: 'Activo Registrado',
+      body: 'Se ha registrado el activo ${_nombreCtrl.text.trim()} en la base local.',
+      notificationDetails: detalles,
+    );
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Registro guardado exitosamente.')),
+    );
+    _nombreCtrl.clear();
+    _codigoCtrl.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
-            ),
-          ],
+      appBar: AppBar(title: const Text('Nuevo Activo / Equipo')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Form(
+          key: _formKey,
+          child: Column(
+            children: [
+              TextFormField(
+                controller: _nombreCtrl,
+                decoration: const InputDecoration(labelText: 'Nombre del Equipo'),
+                validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+              ),
+              TextFormField(
+                controller: _codigoCtrl,
+                decoration: const InputDecoration(labelText: 'Código de Serie'),
+                validator: (v) => v == null || v.isEmpty ? 'Requerido' : null,
+              ),
+              const SizedBox(height: 20),
+              FilledButton.icon(
+                onPressed: _guardarYNotificar,
+                icon: const Icon(Icons.save),
+                label: const Text('Registrar Activo'),
+              )
+            ],
+          ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+}
+
+class ApiSincronizacionScreen extends StatefulWidget {
+  const ApiSincronizacionScreen({super.key});
+
+  @override
+  State<ApiSincronizacionScreen> createState() => _ApiSincronizacionScreenState();
+}
+
+class _ApiSincronizacionScreenState extends State<ApiSincronizacionScreen> {
+  bool _cargando = false;
+  List _items = [];
+
+  Future<void> _sincronizarREST() async {
+    setState(() => _cargando = true);
+    try {
+      final res = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/posts?_limit=5'));
+      if (res.statusCode == 200) {
+        setState(() => _items = jsonDecode(res.body));
+      }
+    } finally {
+      setState(() => _cargando = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Sincronización Cloud REST')),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            ElevatedButton.icon(
+              onPressed: _sincronizarREST,
+              icon: const Icon(Icons.sync),
+              label: const Text('Consultar Servidor REST'),
+            ),
+            const SizedBox(height: 16),
+            _cargando
+                ? const CircularProgressIndicator()
+                : Expanded(
+                    child: ListView.builder(
+                      itemCount: _items.length,
+                      itemBuilder: (context, i) => ListTile(
+                        leading: CircleAvatar(child: Text('${_items[i]['id']}')),
+                        title: Text(_items[i]['title']),
+                      ),
+                    ),
+                  ),
+          ],
+        ),
       ),
     );
   }
